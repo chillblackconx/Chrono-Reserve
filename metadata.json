@@ -1,5 +1,5 @@
 {
-  "name": "Chrono-Réserve Futuriste",
-  "description": "Une application de réservation de créneaux horaires au style futuriste, permettant aux utilisateurs de réserver des cours d'une heure avec une pause obligatoire de 30 minutes entre chaque session.",
+  "name": "Chrono-Réserve",
+  "description": "Une application de réservation de créneaux au style futuriste, permettant aux utilisateurs de réserver des sessions d'une heure avec une pause obligatoire de 30 minutes.",
   "requestFramePermissions": []
 }

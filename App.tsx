@@ -91,7 +91,7 @@ const App: React.FC = () => {
     const numBooked = selectedIds.length;
     if (numBooked > 0 && selectedDate) {
       storage.addBooking(selectedDate, selectedIds);
-      const message = `Réservation confirmée pour ${numBooked} session(s) !`;
+      const message = `Réservation confirmée pour ${numBooked} créneau(x) !`;
       setBookingMessage(message);
       
       setTimeout(() => {

@@ -29,11 +29,11 @@ const SESSION_USER_KEY = 'chronoReserveUser';
 const getInitialData = (): StorageData => ({
     bookings: {},
     splashConfig: {
-        message: 'Bienvenue dans le Futur',
+        message: 'Réservez votre futur',
         gradientStart: '#1f2937',
         gradientEnd: '#000000',
     },
-    globalMessage: 'Annonce importante : la maintenance est prévue ce week-end.',
+    globalMessage: 'Annonce importante : Maintenance prévue ce week-end.',
     scheduleConfig: {
         startHour: 9,
         endHour: 15,

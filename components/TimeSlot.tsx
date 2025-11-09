@@ -21,7 +21,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({ slot, onClick }) => {
 
   const disabledContent: { [key in Exclude<DisabledReason, null>]: string } = {
     BOOKED: 'Réservé',
-    CLASS_PART: 'Cours',
+    CLASS_PART: 'Session',
     BREAK: 'Pause',
     TOO_CLOSE: 'Bloqué',
   };
