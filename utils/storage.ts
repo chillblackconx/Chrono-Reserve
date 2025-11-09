@@ -1,37 +1,25 @@
 import { User } from '../types';
 
-export interface SplashConfig {
-    message: string;
-    gradientStart: string;
-    gradientEnd: string;
-}
-
-export interface ScheduleConfig {
-    startHour: number;
-    endHour: number;
+interface StoredUser extends User {
+    passwordHash: string; // For simulation, we'll store a mock hash
 }
 
 interface StorageData {
     bookings: { [date: string]: string[] };
-    splashConfig: SplashConfig;
-    globalMessage: string;
-    scheduleConfig: ScheduleConfig;
+    users: StoredUser[];
 }
 
-const STORAGE_KEY = 'chronoReserveData';
+const STORAGE_KEY = 'chronoReserveData_v2';
+
+// --- Hashing Simulation ---
+// In a real app, use a library like bcrypt. This is just for demonstration.
+const simpleHash = (s: string): string => {
+    return 'hashed_' + s.split('').reverse().join('');
+}
 
 const getInitialData = (): StorageData => ({
     bookings: {},
-    splashConfig: {
-        message: 'Réservez votre futur',
-        gradientStart: '#1f2937',
-        gradientEnd: '#000000',
-    },
-    globalMessage: 'Annonce importante : Maintenance prévue ce week-end.',
-    scheduleConfig: {
-        startHour: 9,
-        endHour: 15,
-    },
+    users: [],
 });
 
 export const getData = (): StorageData => {
@@ -43,7 +31,6 @@ export const getData = (): StorageData => {
             return initialData;
         }
         const parsed = JSON.parse(rawData);
-        // Merge with initial data to ensure all keys are present, even if storage is old
         return { ...getInitialData(), ...parsed };
     } catch (error) {
         console.error("Error reading from localStorage", error);
@@ -58,6 +45,49 @@ const saveData = (data: StorageData) => {
         console.error("Error saving to localStorage", error);
     }
 };
+
+// --- Auth ---
+const SESSION_USER_KEY = 'chrono_session_user';
+
+export const registerUser = (name: string, username: string, password: string): { success: boolean, message: string } => {
+    const data = getData();
+    if (data.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
+        return { success: false, message: "Ce nom d'utilisateur est déjà pris." };
+    }
+    const newUser: StoredUser = {
+        name,
+        username,
+        passwordHash: simpleHash(password)
+    };
+    data.users.push(newUser);
+    saveData(data);
+    return { success: true, message: 'Compte créé avec succès !' };
+};
+
+export const loginUser = (username: string, password: string): User | null => {
+    const data = getData();
+    const user = data.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    if (user && user.passwordHash === simpleHash(password)) {
+        const sessionUser: User = { username: user.username, name: user.name };
+        sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(sessionUser));
+        return sessionUser;
+    }
+    return null;
+};
+
+export const logoutUser = () => {
+    sessionStorage.removeItem(SESSION_USER_KEY);
+};
+
+export const getCurrentUser = (): User | null => {
+    try {
+        const userJson = sessionStorage.getItem(SESSION_USER_KEY);
+        return userJson ? JSON.parse(userJson) : null;
+    } catch {
+        return null;
+    }
+};
+
 
 // --- Bookings ---
 export const getBookingsForDate = (date: Date): string[] => {
@@ -87,26 +117,6 @@ export const removeBooking = (date: Date, timeSlot: string) => {
     saveData(data);
 };
 
-// --- Splash Config ---
-export const getSplashConfig = (): SplashConfig => getData().splashConfig;
-export const setSplashConfig = (config: SplashConfig) => {
-    const data = getData();
-    data.splashConfig = config;
-    saveData(data);
-};
-
-// --- Global Message ---
-export const getGlobalMessage = (): string => getData().globalMessage;
-export const setGlobalMessage = (message: string) => {
-    const data = getData();
-    data.globalMessage = message;
-    saveData(data);
-};
-
-// --- Schedule Config ---
-export const getScheduleConfig = (): ScheduleConfig => getData().scheduleConfig;
-export const setScheduleConfig = (config: ScheduleConfig) => {
-    const data = getData();
-    data.scheduleConfig = config;
-    saveData(data);
-};
+// --- Hardcoded Configs (previously in storage) ---
+export const getScheduleConfig = () => ({ startHour: 9, endHour: 15 });
+export const getGlobalMessage = () => null; // No more global message

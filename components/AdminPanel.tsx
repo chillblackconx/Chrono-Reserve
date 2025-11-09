@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as storage from '../utils/storage';
 
 const ADMIN_PASSWORD = 'F_u_T_u_R_3_@d_M_!_n_P_@_N_3_L';
@@ -9,9 +9,6 @@ const AdminPanel: React.FC = () => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
-    const [splashConfig, setSplashConfig] = useState<storage.SplashConfig>(() => storage.getSplashConfig());
-    const [globalMessage, setGlobalMessage] = useState<string>(() => storage.getGlobalMessage());
-    const [scheduleConfig, setScheduleConfig] = useState<storage.ScheduleConfig>(() => storage.getScheduleConfig());
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [bookings, setBookings] = useState<string[]>([]);
 
@@ -58,25 +55,6 @@ const AdminPanel: React.FC = () => {
         setIsAuthenticated(false);
     };
 
-    const handleSaveSplash = () => {
-        storage.setSplashConfig(splashConfig);
-        alert('Configuration de l\'accueil sauvegardée !');
-    };
-
-    const handleSaveMessage = () => {
-        storage.setGlobalMessage(globalMessage);
-        alert('Message global sauvegardé !');
-    };
-    
-    const handleSaveSchedule = () => {
-        if (scheduleConfig.startHour >= scheduleConfig.endHour) {
-            alert("L'heure de début doit être antérieure à l'heure de fin.");
-            return;
-        }
-        storage.setScheduleConfig(scheduleConfig);
-        alert('Horaires de réservation sauvegardés !');
-    };
-
     const handleDeleteBooking = (timeSlot: string) => {
         const date = new Date(selectedDate);
         const timezoneOffset = date.getTimezoneOffset() * 60000;
@@ -110,74 +88,30 @@ const AdminPanel: React.FC = () => {
     }
 
     return (
-        <div className="p-4 md:p-8">
+        <div className="p-4 md:p-8 max-w-2xl mx-auto">
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold text-cyan-300">Panneau d'Administration</h1>
                 <button onClick={handleLogout} className="bg-red-600 text-white font-bold py-2 px-4 rounded-md hover:bg-red-500 transition-colors">Déconnexion</button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700">
-                    <h2 className="text-2xl font-semibold text-cyan-400 mb-4">Personnalisation</h2>
-                    
-                    <div className="mb-6">
-                        <h3 className="text-lg font-bold mb-2">Écran d'accueil (Splash)</h3>
-                        <label className="block mb-2 text-sm text-gray-400">Message</label>
-                        <input type="text" value={splashConfig.message} onChange={e => setSplashConfig(c => ({...c, message: e.target.value}))} className="w-full bg-gray-700 p-2 rounded-md border border-gray-600" />
-                        <div className="flex gap-4 mt-2">
-                            <div>
-                                <label className="block mb-1 text-sm text-gray-400">Dégradé Début</label>
-                                <input type="color" value={splashConfig.gradientStart} onChange={e => setSplashConfig(c => ({...c, gradientStart: e.target.value}))} className="w-20 h-10 bg-gray-700 rounded-md" />
-                            </div>
-                            <div>
-                                <label className="block mb-1 text-sm text-gray-400">Dégradé Fin</label>
-                                <input type="color" value={splashConfig.gradientEnd} onChange={e => setSplashConfig(c => ({...c, gradientEnd: e.target.value}))} className="w-20 h-10 bg-gray-700 rounded-md" />
-                            </div>
-                        </div>
-                        <button onClick={handleSaveSplash} className="mt-4 bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-500 transition-colors">Sauvegarder Splash</button>
-                    </div>
-
-                    <div className="mb-6">
-                        <h3 className="text-lg font-bold mb-2">Message Global</h3>
-                        <textarea value={globalMessage} onChange={e => setGlobalMessage(e.target.value)} className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 h-24" />
-                        <button onClick={handleSaveMessage} className="mt-2 bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-500 transition-colors">Sauvegarder Message</button>
-                    </div>
-
-                    <div>
-                        <h3 className="text-lg font-bold mb-2">Horaires de Réservation</h3>
-                        <div className="flex gap-4 items-center">
-                            <div>
-                                <label className="block mb-1 text-sm text-gray-400">Heure de Début</label>
-                                <input type="number" min="0" max="23" value={scheduleConfig.startHour} onChange={e => setScheduleConfig(c => ({...c, startHour: parseInt(e.target.value) || 0}))} className="w-24 bg-gray-700 p-2 rounded-md border border-gray-600" />
-                            </div>
-                            <div>
-                                <label className="block mb-1 text-sm text-gray-400">Heure de Fin</label>
-                                <input type="number" min="1" max="24" value={scheduleConfig.endHour} onChange={e => setScheduleConfig(c => ({...c, endHour: parseInt(e.target.value) || 24}))} className="w-24 bg-gray-700 p-2 rounded-md border border-gray-600" />
-                            </div>
-                        </div>
-                        <button onClick={handleSaveSchedule} className="mt-4 bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-500 transition-colors">Sauvegarder Horaires</button>
-                    </div>
-                </div>
-
-                <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700">
-                    <h2 className="text-2xl font-semibold text-cyan-400 mb-4">Gestion des Réservations</h2>
-                    <label className="block mb-2 text-sm text-gray-400">Sélectionner une date</label>
-                    <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 mb-4" />
-                    
-                    <h3 className="text-lg font-bold mb-2">Réservations pour le {new Date(selectedDate).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}</h3>
-                    {bookings.length > 0 ? (
-                        <ul className="space-y-2 max-h-96 overflow-y-auto">
-                            {bookings.map(time => (
-                                <li key={time} className="flex justify-between items-center bg-gray-700 p-3 rounded-md">
-                                    <span className="font-mono text-cyan-300">{time}</span>
-                                    <button onClick={() => handleDeleteBooking(time)} className="text-red-400 hover:text-red-300 text-sm font-semibold">Supprimer</button>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="text-gray-400">Aucune réservation pour cette date.</p>
-                    )}
-                </div>
+            <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700">
+                <h2 className="text-2xl font-semibold text-cyan-400 mb-4">Gestion des Réservations</h2>
+                <label className="block mb-2 text-sm text-gray-400">Sélectionner une date</label>
+                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 mb-4" />
+                
+                <h3 className="text-lg font-bold mb-2">Réservations pour le {new Date(selectedDate).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}</h3>
+                {bookings.length > 0 ? (
+                    <ul className="space-y-2 max-h-96 overflow-y-auto">
+                        {bookings.map(time => (
+                            <li key={time} className="flex justify-between items-center bg-gray-700 p-3 rounded-md">
+                                <span className="font-mono text-cyan-300">{time}</span>
+                                <button onClick={() => handleDeleteBooking(time)} className="text-red-400 hover:text-red-300 text-sm font-semibold">Supprimer</button>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-gray-400">Aucune réservation pour cette date.</p>
+                )}
             </div>
         </div>
     );

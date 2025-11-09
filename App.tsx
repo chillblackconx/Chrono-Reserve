@@ -1,17 +1,14 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
-import { auth } from './firebase.config';
 import { TimeSlot as TimeSlotType, SlotStatus, User } from './types';
 import { generateTimeSlots } from './utils/time';
 import * as storage from './utils/storage';
 import Header from './components/Header';
 import TimeSlotGrid from './components/TimeSlotGrid';
 import BookingConfirmation from './components/BookingConfirmation';
-import SplashScreen from './components/SplashScreen';
 import DateSelector from './components/DateSelector';
 import AuthScreen from './components/AuthScreen';
 
-type View = 'loading' | 'auth' | 'splash' | 'booking';
+type View = 'loading' | 'auth' | 'booking';
 
 const getStartOfWeek = (date: Date): Date => {
     const d = new Date(date);
@@ -25,7 +22,6 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<View>('loading');
   
-  const [splashConfig] = useState(() => storage.getSplashConfig());
   const [globalMessage] = useState(() => storage.getGlobalMessage());
   const [scheduleConfig] = useState(() => storage.getScheduleConfig());
 
@@ -37,21 +33,13 @@ const App: React.FC = () => {
   const [bookingMessage, setBookingMessage] = useState<string>('');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        const appUser: User = {
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Utilisateur',
-          email: firebaseUser.email || 'N/A',
-        };
-        setUser(appUser);
-        setView(v => (v === 'auth' || v === 'loading' ? 'splash' : v));
-      } else {
-        setUser(null);
-        setView('auth');
-      }
-    });
-    return () => unsubscribe();
+    const sessionUser = storage.getCurrentUser();
+    if (sessionUser) {
+      setUser(sessionUser);
+      setView('booking');
+    } else {
+      setView('auth');
+    }
   }, []);
 
   useEffect(() => {
@@ -66,21 +54,11 @@ const App: React.FC = () => {
   }, [selectedDate, scheduleConfig]);
 
   const processedSlots = useMemo(() => {
-    const selectedTimes = new Set<number>();
-    selectedIds.forEach(id => {
-      const slot = allSlots.find(s => s.id === id);
-      if (slot) selectedTimes.add(slot.startTime.getTime());
-    });
-
     return allSlots.map(slot => {
-      if (slot.status === SlotStatus.Disabled) return slot;
-
-      const time = slot.startTime.getTime();
-      if (selectedTimes.has(time)) {
-        return { ...slot, status: SlotStatus.Selected };
-      }
-      
-      return { ...slot, status: SlotStatus.Available };
+        if (selectedIds.includes(slot.id)) {
+            return { ...slot, status: SlotStatus.Selected };
+        }
+        return slot;
     });
   }, [selectedIds, allSlots]);
 
@@ -121,11 +99,14 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-      signOut(auth).catch(error => console.error("Erreur de déconnexion:", error));
+      storage.logoutUser();
+      setUser(null);
+      setView('auth');
   };
   
-  const handleLoginSuccess = () => {
-    setView('splash');
+  const handleLoginSuccess = (loggedInUser: User) => {
+    setUser(loggedInUser);
+    setView('booking');
   };
 
   if (view === 'loading') {
@@ -134,10 +115,6 @@ const App: React.FC = () => {
   
   if (view === 'auth') {
     return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
-  }
-  
-  if (view === 'splash') {
-    return <SplashScreen config={splashConfig} onEnter={() => setView('booking')} />;
   }
 
   return (
