@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { auth } from './firebase.config';
 import { TimeSlot as TimeSlotType, SlotStatus, User } from './types';
 import { generateTimeSlots } from './utils/time';
 import * as storage from './utils/storage';
@@ -9,7 +11,7 @@ import SplashScreen from './components/SplashScreen';
 import DateSelector from './components/DateSelector';
 import AuthScreen from './components/AuthScreen';
 
-type View = 'auth' | 'splash' | 'booking';
+type View = 'loading' | 'auth' | 'splash' | 'booking';
 
 const getStartOfWeek = (date: Date): Date => {
     const d = new Date(date);
@@ -20,8 +22,8 @@ const getStartOfWeek = (date: Date): Date => {
 };
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(() => storage.getCurrentUser());
-  const [view, setView] = useState<View>(user ? 'splash' : 'auth');
+  const [user, setUser] = useState<User | null>(null);
+  const [view, setView] = useState<View>('loading');
   
   const [splashConfig] = useState(() => storage.getSplashConfig());
   const [globalMessage] = useState(() => storage.getGlobalMessage());
@@ -33,6 +35,24 @@ const App: React.FC = () => {
   const [allSlots, setAllSlots] = useState<TimeSlotType[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bookingMessage, setBookingMessage] = useState<string>('');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        const appUser: User = {
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Utilisateur',
+          email: firebaseUser.email || 'N/A',
+        };
+        setUser(appUser);
+        setView(v => (v === 'auth' || v === 'loading' ? 'splash' : v));
+      } else {
+        setUser(null);
+        setView('auth');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (!selectedDate) {
@@ -52,27 +72,15 @@ const App: React.FC = () => {
       if (slot) selectedTimes.add(slot.startTime.getTime());
     });
 
-    const disabledTimes = new Map<number, 'BREAK'>();
-    const oneHour = 60 * 60 * 1000;
-    
-    selectedTimes.forEach(selectedTime => {
-        // A class is 1h, break 30m. Disable adjacent slots.
-        disabledTimes.set(selectedTime + oneHour, 'BREAK');
-        disabledTimes.set(selectedTime - oneHour, 'BREAK');
-    });
-
     return allSlots.map(slot => {
+      if (slot.status === SlotStatus.Disabled) return slot;
+
       const time = slot.startTime.getTime();
-      if (slot.reason === 'BOOKED' || slot.reason === 'BREAK') {
-        return { ...slot, status: SlotStatus.Disabled };
-      }
       if (selectedTimes.has(time)) {
-        return { ...slot, status: SlotStatus.Selected, reason: null };
+        return { ...slot, status: SlotStatus.Selected };
       }
-      if (disabledTimes.has(time)) {
-        return { ...slot, status: SlotStatus.Disabled, reason: disabledTimes.get(time)! };
-      }
-      return { ...slot, status: SlotStatus.Available, reason: null };
+      
+      return { ...slot, status: SlotStatus.Available };
     });
   }, [selectedIds, allSlots]);
 
@@ -111,21 +119,21 @@ const App: React.FC = () => {
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
   };
-  
-  const handleLogin = (loggedInUser: User) => {
-      storage.setCurrentUser(loggedInUser);
-      setUser(loggedInUser);
-      setView('splash');
-  };
 
   const handleLogout = () => {
-      storage.logoutUser();
-      setUser(null);
-      setView('auth');
+      signOut(auth).catch(error => console.error("Erreur de déconnexion:", error));
+  };
+  
+  const handleLoginSuccess = () => {
+    setView('splash');
   };
 
+  if (view === 'loading') {
+    return <div className="min-h-screen flex items-center justify-center"><p>Chargement...</p></div>;
+  }
+  
   if (view === 'auth') {
-    return <AuthScreen onLoginSuccess={handleLogin} />;
+    return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
   }
   
   if (view === 'splash') {

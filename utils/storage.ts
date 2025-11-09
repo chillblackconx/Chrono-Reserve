@@ -11,20 +11,14 @@ export interface ScheduleConfig {
     endHour: number;
 }
 
-interface MockUser extends User {
-    passwordHash: string; // For mock purposes, not secure
-}
-
 interface StorageData {
     bookings: { [date: string]: string[] };
     splashConfig: SplashConfig;
     globalMessage: string;
     scheduleConfig: ScheduleConfig;
-    users: MockUser[];
 }
 
 const STORAGE_KEY = 'chronoReserveData';
-const SESSION_USER_KEY = 'chronoReserveUser';
 
 const getInitialData = (): StorageData => ({
     bookings: {},
@@ -38,7 +32,6 @@ const getInitialData = (): StorageData => ({
         startHour: 9,
         endHour: 15,
     },
-    users: [],
 });
 
 export const getData = (): StorageData => {
@@ -50,6 +43,7 @@ export const getData = (): StorageData => {
             return initialData;
         }
         const parsed = JSON.parse(rawData);
+        // Merge with initial data to ensure all keys are present, even if storage is old
         return { ...getInitialData(), ...parsed };
     } catch (error) {
         console.error("Error reading from localStorage", error);
@@ -115,49 +109,4 @@ export const setScheduleConfig = (config: ScheduleConfig) => {
     const data = getData();
     data.scheduleConfig = config;
     saveData(data);
-};
-
-// --- Auth ---
-export const registerUser = async (name: string, email: string, password: string): Promise<User | { error: string }> => {
-    const data = getData();
-    if (data.users.find(u => u.email === email)) {
-        return { error: 'Cet e-mail est déjà utilisé.' };
-    }
-    const newUser: MockUser = {
-        id: Date.now().toString(),
-        name,
-        email,
-        passwordHash: password // In a real app, hash this!
-    };
-    data.users.push(newUser);
-    saveData(data);
-    const { passwordHash, ...user } = newUser;
-    return user;
-};
-
-export const loginUser = async (email: string, password: string): Promise<User | { error: string }> => {
-    const data = getData();
-    const foundUser = data.users.find(u => u.email === email);
-    if (!foundUser || foundUser.passwordHash !== password) {
-        return { error: 'E-mail ou mot de passe incorrect.' };
-    }
-    const { passwordHash, ...user } = foundUser;
-    return user;
-};
-
-export const setCurrentUser = (user: User) => {
-    sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
-};
-
-export const getCurrentUser = (): User | null => {
-    try {
-        const userJson = sessionStorage.getItem(SESSION_USER_KEY);
-        return userJson ? JSON.parse(userJson) : null;
-    } catch {
-        return null;
-    }
-};
-
-export const logoutUser = () => {
-    sessionStorage.removeItem(SESSION_USER_KEY);
 };

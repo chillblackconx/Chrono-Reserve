@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/!private!",
+      "destination": "/!private!.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
