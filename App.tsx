@@ -29,17 +29,22 @@ const App: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const [allSlots, setAllSlots] = useState<TimeSlotType[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bookingMessage, setBookingMessage] = useState<string>('');
+  const [isBooking, setIsBooking] = useState(false);
 
   useEffect(() => {
-    const sessionUser = storage.getCurrentUser();
-    if (sessionUser) {
-      setUser(sessionUser);
-      setView('booking');
-    } else {
-      setView('auth');
-    }
+    const unsubscribe = storage.onAuthChange((user) => {
+        if (user) {
+            setUser(user);
+            setView('booking');
+        } else {
+            setUser(null);
+            setView('auth');
+        }
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -47,10 +52,17 @@ const App: React.FC = () => {
       setAllSlots([]);
       return;
     }
-    const bookedSlots = storage.getBookingsForDate(selectedDate);
-    const generated = generateTimeSlots(scheduleConfig.startHour, scheduleConfig.endHour, bookedSlots);
-    setAllSlots(generated);
-    setSelectedIds([]);
+
+    const fetchSlots = async () => {
+        setSlotsLoading(true);
+        const bookedSlots = await storage.getBookingsForDate(selectedDate);
+        const generated = generateTimeSlots(scheduleConfig.startHour, scheduleConfig.endHour, bookedSlots);
+        setAllSlots(generated);
+        setSelectedIds([]);
+        setSlotsLoading(false);
+    };
+
+    fetchSlots();
   }, [selectedDate, scheduleConfig]);
 
   const processedSlots = useMemo(() => {
@@ -73,22 +85,24 @@ const App: React.FC = () => {
     );
   }, [processedSlots]);
 
-  const handleConfirmBooking = useCallback(() => {
-    const numBooked = selectedIds.length;
-    if (numBooked > 0 && selectedDate) {
-      storage.addBooking(selectedDate, selectedIds);
-      const message = `Réservation confirmée pour ${numBooked} créneau(x) !`;
+  const handleConfirmBooking = useCallback(async () => {
+    if (selectedIds.length > 0 && selectedDate && user) {
+      setIsBooking(true);
+      await storage.addBooking(selectedDate, selectedIds, user);
+      const message = `Réservation confirmée pour ${selectedIds.length} créneau(x) !`;
       setBookingMessage(message);
       
-      setTimeout(() => {
+      setTimeout(async () => {
         setBookingMessage('');
-        const bookedSlots = storage.getBookingsForDate(selectedDate);
+        // Refetch slots to show updated state
+        const bookedSlots = await storage.getBookingsForDate(selectedDate);
         const updatedSlots = generateTimeSlots(scheduleConfig.startHour, scheduleConfig.endHour, bookedSlots);
         setAllSlots(updatedSlots);
         setSelectedIds([]);
+        setIsBooking(false);
       }, 3000);
     }
-  }, [selectedIds, selectedDate, scheduleConfig]);
+  }, [selectedIds, selectedDate, scheduleConfig, user]);
 
   const selectedSlots = useMemo(() => {
     return processedSlots.filter(slot => slot.status === SlotStatus.Selected);
@@ -98,19 +112,19 @@ const App: React.FC = () => {
     setSelectedDate(date);
   };
 
-  const handleLogout = () => {
-      storage.logoutUser();
-      setUser(null);
-      setView('auth');
+  const handleLogout = async () => {
+      await storage.logoutUser();
+      // The onAuthChange listener will handle setting user and view
   };
   
   const handleLoginSuccess = (loggedInUser: User) => {
+    // The onAuthChange listener now handles this state change
     setUser(loggedInUser);
     setView('booking');
   };
 
   if (view === 'loading') {
-    return <div className="min-h-screen flex items-center justify-center"><p>Chargement...</p></div>;
+    return <div className="min-h-screen flex items-center justify-center"><p>Chargement de l'application...</p></div>;
   }
   
   if (view === 'auth') {
@@ -137,14 +151,29 @@ const App: React.FC = () => {
              <h3 className="text-xl text-center text-gray-300 mb-4">
                 Créneaux disponibles pour le <span className="font-bold text-cyan-300">{selectedDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
             </h3>
-            <TimeSlotGrid slots={processedSlots} onSlotClick={handleSlotClick} />
+            {slotsLoading ? (
+                <div className="text-center p-8 text-cyan-300">Chargement des créneaux...</div>
+            ) : (
+                <TimeSlotGrid slots={processedSlots} onSlotClick={handleSlotClick} />
+            )}
           </div>
         )}
       </main>
-      <BookingConfirmation selectedSlots={selectedSlots} onConfirm={handleConfirmBooking} />
+      <BookingConfirmation selectedSlots={selectedSlots} onConfirm={handleConfirmBooking} isBooking={isBooking} />
       {bookingMessage && (
         <div className="fixed top-5 right-5 bg-green-500 text-white p-4 rounded-lg shadow-lg animate-pulse z-50">
           {bookingMessage}
+        </div>
+      )}
+       {isBooking && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg text-white text-lg flex items-center gap-4 shadow-2xl shadow-cyan-500/20">
+            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Réservation en cours...
+          </div>
         </div>
       )}
     </div>

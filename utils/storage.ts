@@ -1,122 +1,187 @@
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+  onAuthStateChanged,
+  type User as FirebaseUser,
+  GoogleAuthProvider,
+  MicrosoftAuthProvider,
+  signInWithPopup,
+  type AuthProvider,
+} from 'firebase/auth';
+import {
+  collection,
+  doc,
+  getDocs,
+  writeBatch,
+  query,
+  where,
+  setDoc,
+  deleteDoc,
+  getDoc,
+} from 'firebase/firestore';
+import { auth, db } from '../firebase.config';
 import { User } from '../types';
 
-interface StoredUser extends User {
-    passwordHash: string; // For simulation, we'll store a mock hash
-}
-
-interface StorageData {
-    bookings: { [date: string]: string[] };
-    users: StoredUser[];
-}
-
-const STORAGE_KEY = 'chronoReserveData_v2';
-
-// --- Hashing Simulation ---
-// In a real app, use a library like bcrypt. This is just for demonstration.
-const simpleHash = (s: string): string => {
-    return 'hashed_' + s.split('').reverse().join('');
-}
-
-const getInitialData = (): StorageData => ({
-    bookings: {},
-    users: [],
-});
-
-export const getData = (): StorageData => {
-    try {
-        const rawData = localStorage.getItem(STORAGE_KEY);
-        if (!rawData) {
-            const initialData = getInitialData();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(initialData));
-            return initialData;
-        }
-        const parsed = JSON.parse(rawData);
-        return { ...getInitialData(), ...parsed };
-    } catch (error) {
-        console.error("Error reading from localStorage", error);
-        return getInitialData();
-    }
-};
-
-const saveData = (data: StorageData) => {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (error) {
-        console.error("Error saving to localStorage", error);
-    }
-};
-
 // --- Auth ---
-const SESSION_USER_KEY = 'chrono_session_user';
 
-export const registerUser = (name: string, username: string, password: string): { success: boolean, message: string } => {
-    const data = getData();
-    if (data.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
-        return { success: false, message: "Ce nom d'utilisateur est déjà pris." };
+export const onAuthChange = (callback: (user: User | null) => void) => {
+  return onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    if (firebaseUser) {
+      const userDocRef = doc(db, 'users', firebaseUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      const name = userDoc.exists() ? userDoc.data().name : firebaseUser.displayName;
+
+      callback({
+        uid: firebaseUser.uid,
+        username: firebaseUser.email || '',
+        name: name || '',
+      });
+    } else {
+      callback(null);
     }
-    const newUser: StoredUser = {
-        name,
-        username,
-        passwordHash: simpleHash(password)
-    };
-    data.users.push(newUser);
-    saveData(data);
+  });
+};
+
+export const registerUser = async (name: string, email: string, password: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    await updateProfile(user, { displayName: name });
+    
+    await setDoc(doc(db, "users", user.uid), {
+        name: name,
+        email: email,
+    });
+
     return { success: true, message: 'Compte créé avec succès !' };
-};
-
-export const loginUser = (username: string, password: string): User | null => {
-    const data = getData();
-    const user = data.users.find(u => u.username.toLowerCase() === username.toLowerCase());
-    if (user && user.passwordHash === simpleHash(password)) {
-        const sessionUser: User = { username: user.username, name: user.name };
-        sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(sessionUser));
-        return sessionUser;
+  } catch (error: any) {
+    if (error.code === 'auth/email-already-in-use') {
+      return { success: false, message: 'Cette adresse e-mail est déjà utilisée.' };
     }
-    return null;
+    if (error.code === 'auth/weak-password') {
+        return { success: false, message: 'Le mot de passe doit contenir au moins 6 caractères.'};
+    }
+    console.error('Error registering user:', error);
+    return { success: false, message: "Une erreur est survenue lors de l'inscription." };
+  }
 };
 
-export const logoutUser = () => {
-    sessionStorage.removeItem(SESSION_USER_KEY);
-};
-
-export const getCurrentUser = (): User | null => {
+export const loginUser = async (email: string, password: string): Promise<User | null> => {
     try {
-        const userJson = sessionStorage.getItem(SESSION_USER_KEY);
-        return userJson ? JSON.parse(userJson) : null;
-    } catch {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const name = userDoc.exists() ? userDoc.data().name : user.displayName;
+
+        return {
+            uid: user.uid,
+            username: user.email || '',
+            name: name || ''
+        };
+    } catch (error) {
+        console.error("Error logging in:", error);
         return null;
     }
 };
 
+const handleSocialLogin = async (provider: AuthProvider): Promise<User | null> => {
+    try {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+
+        let name = user.displayName;
+        if (userDoc.exists()) {
+            name = userDoc.data().name;
+        } else {
+            await setDoc(doc(db, "users", user.uid), {
+                name: user.displayName,
+                email: user.email,
+            });
+        }
+        
+        return {
+            uid: user.uid,
+            username: user.email || '',
+            name: name || '',
+        };
+
+    } catch (error) {
+        console.error("Error during social login: ", error);
+        return null;
+    }
+}
+
+export const signInWithGoogle = async (): Promise<User | null> => {
+    const provider = new GoogleAuthProvider();
+    return handleSocialLogin(provider);
+};
+
+export const signInWithMicrosoft = async (): Promise<User | null> => {
+    const provider = new MicrosoftAuthProvider();
+    return handleSocialLogin(provider);
+};
+
+export const logoutUser = async (): Promise<void> => {
+  await signOut(auth);
+};
 
 // --- Bookings ---
-export const getBookingsForDate = (date: Date): string[] => {
-    const data = getData();
+
+const getBookingDocId = (date: Date, timeSlot: string) => {
     const dateString = date.toISOString().split('T')[0];
-    return data.bookings[dateString] || [];
+    return `${dateString}_${timeSlot.replace(':', '-')}`;
+}
+
+export const getBookingsForDate = async (date: Date): Promise<string[]> => {
+  const dateString = date.toISOString().split('T')[0];
+  const q = query(collection(db, 'bookings'), where('date', '==', dateString));
+  
+  try {
+    const querySnapshot = await getDocs(q);
+    const bookedSlots: string[] = [];
+    querySnapshot.forEach((doc) => {
+      bookedSlots.push(doc.data().time);
+    });
+    return bookedSlots;
+  } catch (error) {
+    console.error("Error fetching bookings: ", error);
+    return [];
+  }
 };
 
-export const addBooking = (date: Date, timeSlots: string[]) => {
-    const data = getData();
+export const addBooking = async (date: Date, timeSlots: string[], user: User): Promise<void> => {
+    const batch = writeBatch(db);
     const dateString = date.toISOString().split('T')[0];
-    const existingBookings = data.bookings[dateString] || [];
-    const newBookings = [...new Set([...existingBookings, ...timeSlots])];
-    data.bookings[dateString] = newBookings.sort();
-    saveData(data);
+
+    timeSlots.forEach(time => {
+        const docId = getBookingDocId(date, time);
+        const bookingRef = doc(db, 'bookings', docId);
+        batch.set(bookingRef, {
+            date: dateString,
+            time: time,
+            userId: user.uid,
+            userName: user.name,
+            bookedAt: new Date().toISOString()
+        });
+    });
+
+    await batch.commit();
 };
 
-export const removeBooking = (date: Date, timeSlot: string) => {
-    const data = getData();
-    const dateString = date.toISOString().split('T')[0];
-    if (data.bookings[dateString]) {
-        data.bookings[dateString] = data.bookings[dateString].filter(t => t !== timeSlot);
-        if(data.bookings[dateString].length === 0) {
-            delete data.bookings[dateString];
-        }
-    }
-    saveData(data);
+
+export const removeBooking = async (date: Date, timeSlot: string): Promise<void> => {
+    const docId = getBookingDocId(date, timeSlot);
+    const bookingRef = doc(db, 'bookings', docId);
+    await deleteDoc(bookingRef);
 };
 
-// --- Hardcoded Configs (previously in storage) ---
+
+// --- Configs ---
 export const getScheduleConfig = () => ({ startHour: 9, endHour: 15 });
-export const getGlobalMessage = () => null; // No more global message
+export const getGlobalMessage = () => null;

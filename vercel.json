@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/!private!",
-      "destination": "/!private!.html"
+      "source": "/admin",
+      "destination": "/admin.html"
     },
     {
       "source": "/(.*)",

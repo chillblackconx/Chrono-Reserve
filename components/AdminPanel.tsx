@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as storage from '../utils/storage';
 
-const ADMIN_PASSWORD = 'F_u_T_u_R_3_@d_M_!_n_P_@_N_3_L';
+const ADMIN_PASSWORD = 'reserve-admin-777';
 const SESSION_KEY = 'admin_session_active';
 
 const AdminPanel: React.FC = () => {
@@ -11,36 +11,39 @@ const AdminPanel: React.FC = () => {
 
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [bookings, setBookings] = useState<string[]>([]);
+    const [loadingBookings, setLoadingBookings] = useState(false);
 
     useEffect(() => {
-        const handleBeforeUnload = () => {
-            if (sessionStorage.getItem(SESSION_KEY) === 'true') {
-                 sessionStorage.removeItem(SESSION_KEY);
-            }
-        };
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
         if (sessionStorage.getItem(SESSION_KEY) === 'true') {
             setIsAuthenticated(true);
+            return;
         }
-
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+        const urlParams = new URLSearchParams(window.location.search);
+        const passwordFromUrl = urlParams.get('pwd');
+        if (passwordFromUrl === ADMIN_PASSWORD) {
+            sessionStorage.setItem(SESSION_KEY, 'true');
+            setIsAuthenticated(true);
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
     }, []);
     
     useEffect(() => {
         if(isAuthenticated) {
-            const date = new Date(selectedDate);
-            const timezoneOffset = date.getTimezoneOffset() * 60000;
-            setBookings(storage.getBookingsForDate(new Date(date.getTime() + timezoneOffset)));
+            const fetchBookings = async () => {
+                setLoadingBookings(true);
+                const date = new Date(selectedDate);
+                const timezoneOffset = date.getTimezoneOffset() * 60000;
+                const adjustedDate = new Date(date.getTime() + timezoneOffset);
+                const fetchedBookings = await storage.getBookingsForDate(adjustedDate);
+                setBookings(fetchedBookings);
+                setLoadingBookings(false);
+            };
+            fetchBookings();
         }
     }, [selectedDate, isAuthenticated]);
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
-        if (sessionStorage.getItem(SESSION_KEY) && sessionStorage.getItem(SESSION_KEY) !== 'true') {
-            setError("Une session administrateur est déjà active dans un autre onglet.");
-            return;
-        }
         if (password === ADMIN_PASSWORD) {
             sessionStorage.setItem(SESSION_KEY, 'true');
             setIsAuthenticated(true);
@@ -55,14 +58,15 @@ const AdminPanel: React.FC = () => {
         setIsAuthenticated(false);
     };
 
-    const handleDeleteBooking = (timeSlot: string) => {
+    const handleDeleteBooking = async (timeSlot: string) => {
         const date = new Date(selectedDate);
         const timezoneOffset = date.getTimezoneOffset() * 60000;
         const adjustedDate = new Date(date.getTime() + timezoneOffset);
 
         if (window.confirm(`Voulez-vous vraiment supprimer la réservation de ${timeSlot} pour le ${adjustedDate.toLocaleDateString('fr-FR')} ?`)) {
-            storage.removeBooking(adjustedDate, timeSlot);
-            setBookings(storage.getBookingsForDate(adjustedDate));
+            await storage.removeBooking(adjustedDate, timeSlot);
+            const fetchedBookings = await storage.getBookingsForDate(adjustedDate);
+            setBookings(fetchedBookings);
         }
     };
 
@@ -71,6 +75,7 @@ const AdminPanel: React.FC = () => {
             <div className="min-h-screen flex items-center justify-center">
                 <form onSubmit={handleLogin} className="bg-gray-800 p-8 rounded-lg shadow-2xl shadow-cyan-500/20 w-full max-w-sm">
                     <h1 className="text-2xl font-bold text-center text-cyan-300 mb-6">Accès Administrateur</h1>
+                    <p className="text-center text-gray-400 text-sm mb-4">Entrez le mot de passe ou accédez via l'URL d'accès direct.</p>
                     <input
                         type="password"
                         value={password}
@@ -100,7 +105,9 @@ const AdminPanel: React.FC = () => {
                 <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 mb-4" />
                 
                 <h3 className="text-lg font-bold mb-2">Réservations pour le {new Date(selectedDate).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}</h3>
-                {bookings.length > 0 ? (
+                {loadingBookings ? (
+                     <p className="text-gray-400">Chargement...</p>
+                ) : bookings.length > 0 ? (
                     <ul className="space-y-2 max-h-96 overflow-y-auto">
                         {bookings.map(time => (
                             <li key={time} className="flex justify-between items-center bg-gray-700 p-3 rounded-md">

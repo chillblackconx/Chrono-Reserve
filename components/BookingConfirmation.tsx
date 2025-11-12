@@ -5,9 +5,10 @@ import { TimeSlot } from '../types';
 interface BookingConfirmationProps {
     selectedSlots: TimeSlot[];
     onConfirm: () => void;
+    isBooking: boolean;
 }
 
-const BookingConfirmation: React.FC<BookingConfirmationProps> = ({ selectedSlots, onConfirm }) => {
+const BookingConfirmation: React.FC<BookingConfirmationProps> = ({ selectedSlots, onConfirm, isBooking }) => {
     if (selectedSlots.length === 0) {
         return null;
     }
@@ -26,9 +27,10 @@ const BookingConfirmation: React.FC<BookingConfirmationProps> = ({ selectedSlots
                 </div>
                 <button
                     onClick={onConfirm}
-                    className="w-full sm:w-auto flex-shrink-0 bg-green-500 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-400 transition-colors shadow-[0_0_15px_rgba(52,211,153,0.6)] hover:shadow-[0_0_25px_rgba(52,211,153,0.8)]"
+                    disabled={isBooking}
+                    className="w-full sm:w-auto flex-shrink-0 bg-green-500 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-400 transition-colors shadow-[0_0_15px_rgba(52,211,153,0.6)] hover:shadow-[0_0_25px_rgba(52,211,153,0.8)] disabled:bg-gray-500 disabled:shadow-none disabled:cursor-not-allowed"
                 >
-                    Confirmer {selectedSlots.length} créneau(x)
+                    {isBooking ? 'Confirmation...' : `Confirmer ${selectedSlots.length} créneau(x)`}
                 </button>
             </div>
         </div>

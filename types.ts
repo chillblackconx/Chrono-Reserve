@@ -14,6 +14,7 @@ export interface TimeSlot {
 }
 
 export interface User {
-  username: string;
+  uid: string;
+  username: string; // Will be the email
   name: string;
 }
